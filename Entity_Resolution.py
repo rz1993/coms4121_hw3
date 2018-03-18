@@ -6,6 +6,7 @@ import re
 
 from collections import Counter
 from fuzzywuzzy import fuzz
+import lightgbm as lgb
 from sklearn.linear_model import LogisticRegression
 from sklearn.feature_extraction.text import CountVectorizer
 
@@ -80,11 +81,20 @@ def get_matches(locu_train_path, foursquare_train_path, matches_train_path, locu
                               name_fuzzy,
                               addr_fuzzy,
                               phone_num_match)
-    clf = LogisticRegression()
-    clf.fit(features_train, train_df['matched'])
 
+    '''
+    Load and train a gradient boosted tree using LightGBM's
+    default configuration and Dataset wrapper API.
+    '''
+    features_train_lgb = lgb.Dataset(features_train, label=train_df['matched'])
+    params = {}
+    clf = lgb.train(params, features_train_lgb, 100)
+
+    # Binarize continuous prediction scores from 0 to 1
     preds_test = clf.predict(features_test)
+    preds_test = preds_test > 0.35
 
+    # Select rows which are matches via boolean indexing and write to csv
     matches_test = test_df.loc[preds_test][['id_locu', 'id_foursq']]
     matches_test.columns = ['locu_id', 'foursquare_id']
     matches_test.to_csv('matches_test.csv', index=False)
